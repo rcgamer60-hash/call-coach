@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 load_dotenv(dotenv_path="../.env")
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-opus-4-6"
 
 PERSONAS = {
     "gatekeeper": {

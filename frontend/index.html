@@ -1,533 +1,484 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PitchCoach — Sales Call Simulator</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>PitchCoach</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    * { font-family: 'Inter', sans-serif; }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0f;color:#fff;min-height:100vh;min-height:100dvh;overflow-x:hidden}
 
-    .pulse-ring {
-      animation: pulse-ring 1.4s ease-out infinite;
-    }
-    @keyframes pulse-ring {
-      0%   { transform: scale(0.8); opacity: 1; }
-      80%, 100% { transform: scale(2); opacity: 0; }
-    }
+    /* ── screens ── */
+    .screen{display:none;min-height:100vh;min-height:100dvh}
+    .screen.active{display:flex;flex-direction:column}
 
-    .wave-bar {
-      animation: wave 0.9s ease-in-out infinite;
-    }
-    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
-    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
-    .wave-bar:nth-child(4) { animation-delay: 0.3s; }
-    .wave-bar:nth-child(5) { animation-delay: 0.4s; }
-    @keyframes wave {
-      0%, 100% { height: 8px; }
-      50%       { height: 28px; }
-    }
+    /* ── lobby ── */
+    #lobby{padding:24px 16px 40px}
+    .logo{text-align:center;margin-bottom:28px}
+    .logo h1{font-size:28px;font-weight:800;letter-spacing:-.5px}
+    .logo p{color:#666;font-size:14px;margin-top:6px;line-height:1.5}
+    .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:4px 12px;font-size:11px;color:#818cf8;margin-bottom:12px}
+    .badge-dot{width:6px;height:6px;border-radius:50%;background:#818cf8;animation:pulse2 2s infinite}
+    @keyframes pulse2{0%,100%{opacity:1}50%{opacity:.4}}
 
-    .speaking-dot {
-      animation: speaking 0.6s ease-in-out infinite alternate;
-    }
-    @keyframes speaking {
-      from { opacity: 0.3; transform: scale(0.8); }
-      to   { opacity: 1;   transform: scale(1.2); }
-    }
+    .section-label{font-size:11px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
 
-    .persona-card { transition: all 0.2s ease; }
-    .persona-card:hover { transform: translateY(-2px); }
-    .persona-card.selected { ring: 2px; }
+    /* persona cards */
+    .persona-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+    .pcard{background:#111118;border:2px solid #1c1c2e;border-radius:16px;padding:16px;cursor:pointer;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:14px;-webkit-user-select:none;user-select:none}
+    .pcard:active{background:#16162a}
+    .pcard.sel{border-color:#6366f1;background:rgba(99,102,241,.08)}
+    .pcard-icon{width:44px;height:44px;border-radius:12px;background:#1c1c2e;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+    .pcard.sel .pcard-icon{background:rgba(99,102,241,.2)}
+    .pcard-info{flex:1;min-width:0}
+    .pcard-name{font-size:15px;font-weight:700}
+    .pcard-title{font-size:12px;color:#555;margin-top:1px}
+    .pcard-desc{font-size:12px;color:#444;margin-top:4px;line-height:1.4}
+    .pcard-diff{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;flex-shrink:0;align-self:flex-start}
+    .diff-Easy{background:rgba(74,222,128,.1);color:#4ade80}
+    .diff-Medium{background:rgba(251,191,36,.1);color:#fbbf24}
+    .diff-Hard{background:rgba(251,146,60,.1);color:#fb923c}
+    .diff-Very\ Hard{background:rgba(248,113,113,.1);color:#f87171}
 
-    .transcript-msg { animation: fadeIn 0.3s ease; }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
+    .start-btn{width:100%;padding:18px;background:#6366f1;color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;transition:background .15s;-webkit-appearance:none}
+    .start-btn:active{background:#4f52d1}
+    .start-btn:disabled{background:#1c1c2e;color:#333;cursor:not-allowed}
 
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+    .warn-box{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:12px 14px;font-size:12px;color:#fbbf24;margin-bottom:16px;line-height:1.5}
+
+    /* ── call screen ── */
+    #call{background:#0a0a0f}
+    .call-header{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid #111;flex-shrink:0}
+    .call-who{text-align:center}
+    .call-who-name{font-size:15px;font-weight:700}
+    .call-who-title{font-size:11px;color:#444;margin-top:2px}
+    .call-timer{font-family:ui-monospace,monospace;font-size:13px;color:#555;display:flex;align-items:center;gap:6px}
+    .rec-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:speaking .6s ease-in-out infinite alternate}
+    @keyframes speaking{from{opacity:.3;transform:scale(.8)}to{opacity:1;transform:scale(1.2)}}
+    .end-btn{background:#ef4444;color:#fff;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer}
+    .end-btn:active{background:#dc2626}
+
+    .transcript-wrap{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+    .msg{animation:fadeUp .25s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .msg-you{display:flex;justify-content:flex-end}
+    .msg-bot{display:flex;justify-content:flex-start}
+    .bubble{max-width:78%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.5}
+    .bubble-you{background:#6366f1;border-bottom-right-radius:4px}
+    .bubble-bot{background:#1c1c2e;border-bottom-left-radius:4px}
+    .bubble-name{font-size:10px;color:#555;margin-bottom:3px}
+
+    .call-bottom{padding:16px;border-top:1px solid #111;flex-shrink:0;background:#0a0a0f}
+    .status-row{display:flex;align-items:center;justify-content:center;height:28px;margin-bottom:14px}
+    .status-text{font-size:13px;color:#555}
+    .status-listen{color:#6366f1;display:flex;align-items:center;gap:8px}
+    .status-think{color:#fbbf24;display:flex;align-items:center;gap:8px}
+    .status-speak{color:#4ade80}
+    .waves{display:flex;align-items:center;gap:3px;height:20px}
+    .w{width:3px;background:#6366f1;border-radius:2px;animation:wv .8s ease-in-out infinite}
+    .w:nth-child(2){animation-delay:.1s}.w:nth-child(3){animation-delay:.2s}.w:nth-child(4){animation-delay:.3s}.w:nth-child(5){animation-delay:.4s}
+    @keyframes wv{0%,100%{height:4px}50%{height:18px}}
+    .spin{width:14px;height:14px;border:2px solid #fbbf24;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .live-text{font-size:13px;color:#444;text-align:center;min-height:18px;margin-bottom:14px;font-style:italic;padding:0 20px}
+
+    .mic-wrap{display:flex;justify-content:center;margin-bottom:8px}
+    .mic-outer{position:relative}
+    .mic-ring{position:absolute;inset:-8px;border-radius:50%;background:#6366f1;opacity:0;animation:none}
+    .mic-ring.active{animation:mring 1.2s ease-out infinite}
+    @keyframes mring{0%{transform:scale(.85);opacity:.6}100%{transform:scale(1.8);opacity:0}}
+    .mic-btn{position:relative;width:72px;height:72px;border-radius:50%;background:#1c1c2e;border:2px solid #2a2a40;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,border-color .15s}
+    .mic-btn:active{background:#252540}
+    .mic-btn.on{background:#6366f1;border-color:#6366f1}
+    .mic-btn svg{width:30px;height:30px}
+    .mic-hint{text-align:center;font-size:11px;color:#333}
+
+    /* ── feedback ── */
+    #feedback{padding:24px 16px 40px;overflow-y:auto}
+    .fb-header{text-align:center;margin-bottom:20px}
+    .fb-header h2{font-size:24px;font-weight:800}
+    .fb-header p{color:#555;font-size:13px;margin-top:4px}
+    .score-card{background:#111118;border:1px solid #1c1c2e;border-radius:20px;padding:24px;text-align:center;margin-bottom:14px}
+    .score-num{font-size:56px;font-weight:900;color:#6366f1;line-height:1}
+    .score-of{font-size:12px;color:#444;margin-top:4px}
+    .score-verdict{font-size:15px;font-weight:600;margin-top:12px;line-height:1.4}
+    .fb-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+    .fb-card{background:#111118;border-radius:16px;padding:16px}
+    .fb-card-title{font-size:11px;font-weight:700;margin-bottom:10px}
+    .fb-card ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+    .fb-card li{font-size:12px;color:#aaa;line-height:1.4;display:flex;gap:6px}
+    .fb-card li span:first-child{flex-shrink:0;margin-top:1px}
+    .fb-tip{background:#111118;border:1px solid rgba(99,102,241,.2);border-radius:16px;padding:16px;margin-bottom:20px}
+    .fb-tip-label{font-size:11px;font-weight:700;color:#6366f1;margin-bottom:6px}
+    .fb-tip p{font-size:13px;color:#aaa;line-height:1.5}
+    .fb-btns{display:flex;gap:10px}
+    .fb-btns button{flex:1;padding:16px;border:none;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer}
+    .btn-retry{background:#6366f1;color:#fff}
+    .btn-retry:active{background:#4f52d1}
+    .btn-change{background:#1c1c2e;color:#aaa}
+    .btn-change:active{background:#252540}
   </style>
 </head>
-<body class="bg-gray-950 text-white min-h-screen">
+<body>
 
-<!-- ═══════════════════════════════════════════════════ LOBBY ═══ -->
-<div id="lobby" class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-  <div class="w-full max-w-3xl">
+<!-- ══════════════ LOBBY ══════════════ -->
+<div id="lobby" class="screen active">
+  <div class="logo">
+    <div class="badge"><div class="badge-dot"></div>AI Sales Training</div>
+    <h1>PitchCoach</h1>
+    <p>Practice cold calls with AI prospects<br>that push back like real buyers</p>
+  </div>
 
-    <!-- Header -->
-    <div class="text-center mb-10">
-      <div class="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5 mb-4">
-        <div class="w-2 h-2 rounded-full bg-blue-400"></div>
-        <span class="text-blue-400 text-sm font-medium">AI Sales Training</span>
-      </div>
-      <h1 class="text-4xl font-bold mb-3">PitchCoach</h1>
-      <p class="text-gray-400 text-lg">Practice cold calls with AI prospects that push back like real buyers.</p>
-    </div>
+  <div id="warn-box" class="warn-box" style="display:none">
+    ⚠️ Voice requires Chrome (Android) or Safari (iPhone). Other browsers may not support the mic.
+  </div>
 
-    <!-- Persona grid -->
-    <p class="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Choose your prospect</p>
-    <div id="persona-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8"></div>
+  <p class="section-label">Choose your prospect</p>
+  <div id="persona-grid" class="persona-grid"></div>
 
-    <!-- Browser check -->
-    <div id="browser-warning" class="hidden bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6 text-sm text-yellow-300">
-      ⚠️ Voice requires Chrome (Android/desktop) or Safari (iPhone/iPad). Other browsers may not support the mic.
-    </div>
+  <button id="start-btn" class="start-btn" disabled onclick="startCall()">Start Call</button>
+</div>
 
-    <!-- Start button -->
-    <button id="start-btn" onclick="startCall()"
-      class="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold text-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-      disabled>
-      Start Call
-    </button>
-
+<!-- ══════════════ DIALING ══════════════ -->
+<div id="dialing" class="screen" style="align-items:center;justify-content:center;background:#0a0a0f">
+  <div style="text-align:center">
+    <div id="dial-avatar" style="width:90px;height:90px;border-radius:50%;background:#1c1c2e;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px;box-shadow:0 0 0 12px rgba(99,102,241,.1),0 0 0 24px rgba(99,102,241,.05)"></div>
+    <div id="dial-name" style="font-size:22px;font-weight:800;margin-bottom:4px"></div>
+    <div id="dial-title" style="font-size:13px;color:#555;margin-bottom:20px"></div>
+    <div id="dial-status" style="font-size:14px;color:#6366f1;animation:pulse2 1.2s infinite">Calling...</div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ CALL ════ -->
-<div id="call-screen" class="hidden min-h-screen flex flex-col">
-
-  <!-- Top bar -->
-  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-    <div class="flex items-center gap-3">
-      <div id="call-indicator" class="w-2.5 h-2.5 rounded-full bg-red-500 speaking-dot"></div>
-      <span id="timer-display" class="font-mono text-sm text-gray-300">0:00</span>
+<!-- ══════════════ CALL ══════════════ -->
+<div id="call" class="screen">
+  <div class="call-header">
+    <div class="call-timer">
+      <div class="rec-dot"></div>
+      <span id="timer">0:00</span>
     </div>
-    <div class="text-center">
-      <p id="call-persona-name" class="font-semibold"></p>
-      <p id="call-persona-title" class="text-xs text-gray-500"></p>
+    <div class="call-who">
+      <div id="call-name" class="call-who-name"></div>
+      <div id="call-title" class="call-who-title"></div>
     </div>
-    <button onclick="endCall()"
-      class="bg-red-600 hover:bg-red-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-all">
-      End Call
-    </button>
+    <button class="end-btn" onclick="endCall()">End</button>
   </div>
 
-  <!-- Transcript -->
-  <div id="transcript" class="flex-1 overflow-y-auto px-6 py-4 space-y-3 max-w-2xl w-full mx-auto"></div>
+  <div id="transcript" class="transcript-wrap"></div>
 
-  <!-- Bottom mic area -->
-  <div class="border-t border-gray-800 px-6 py-5">
-    <div class="max-w-2xl mx-auto">
+  <div class="call-bottom">
+    <div class="status-row">
+      <div id="s-idle" class="status-text">Tap mic to speak</div>
+      <div id="s-listen" class="status-listen" style="display:none">
+        <div class="waves"><div class="w"></div><div class="w"></div><div class="w"></div><div class="w"></div><div class="w"></div></div>
+        Listening...
+      </div>
+      <div id="s-think" class="status-think" style="display:none">
+        <div class="spin"></div>Responding...
+      </div>
+      <div id="s-speak" class="status-speak" style="display:none">🔊 Speaking...</div>
+    </div>
 
-      <!-- Status line -->
-      <div id="status-bar" class="flex items-center justify-center gap-2 mb-4 h-8">
-        <div id="status-idle" class="text-gray-500 text-sm">Press the button and speak</div>
-        <div id="status-listening" class="hidden flex items-center gap-2">
-          <div class="flex gap-1 items-center">
-            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
-            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
-            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
-            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
-            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
-          </div>
-          <span class="text-blue-400 text-sm">Listening...</span>
-        </div>
-        <div id="status-thinking" class="hidden text-yellow-400 text-sm flex items-center gap-2">
-          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+    <div id="live-text" class="live-text"></div>
+
+    <div class="mic-wrap">
+      <div class="mic-outer">
+        <div id="mic-ring" class="mic-ring"></div>
+        <button id="mic-btn" class="mic-btn" onclick="toggleMic()">
+          <svg fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-2 15.93A8 8 0 0020 11h-2a6 6 0 01-12 0H4a8 8 0 006 5.93V19H7v2h10v-2h-3v-2.07z"/>
           </svg>
-          Responding...
-        </div>
-        <div id="status-speaking" class="hidden text-green-400 text-sm">🔊 Speaking...</div>
+        </button>
       </div>
-
-      <!-- Live transcript preview -->
-      <div id="live-text" class="text-gray-400 text-sm text-center italic mb-4 min-h-5"></div>
-
-      <!-- Mic button -->
-      <div class="flex justify-center">
-        <div class="relative">
-          <div id="mic-pulse" class="hidden absolute inset-0 rounded-full bg-blue-500 pulse-ring"></div>
-          <button id="mic-btn" onclick="toggleMic()"
-            class="relative w-20 h-20 rounded-full bg-gray-800 active:bg-gray-600 border border-gray-700 flex items-center justify-center transition-all touch-manipulation"
-            style="-webkit-tap-highlight-color: transparent;">
-            <svg id="mic-icon" class="w-9 h-9 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-2 15.93A8 8 0 0020 11h-2a6 6 0 01-12 0H4a8 8 0 006 5.93V19H7v2h10v-2h-3v-2.07z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <p class="text-center text-xs text-gray-600 mt-3">Tap to speak · Tap again to send</p>
-
     </div>
+    <p class="mic-hint">Tap to speak · tap again to send</p>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════ FEEDBACK ═ -->
-<div id="feedback-screen" class="hidden min-h-screen flex flex-col items-center justify-center px-4 py-12">
-  <div class="w-full max-w-2xl">
-    <div class="text-center mb-8">
-      <h2 class="text-3xl font-bold mb-2">Call Review</h2>
-      <p class="text-gray-400">Here's how your pitch went</p>
-    </div>
+<!-- ══════════════ FEEDBACK ══════════════ -->
+<div id="feedback" class="screen">
+  <div class="fb-header">
+    <h2>Call Review</h2>
+    <p>Here's how your pitch went</p>
+  </div>
 
-    <!-- Score -->
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-4 text-center">
-      <div id="fb-score" class="text-6xl font-bold mb-2 text-blue-400"></div>
-      <div class="text-gray-400 text-sm mb-3">out of 10</div>
-      <div id="fb-verdict" class="text-lg font-medium text-white"></div>
-    </div>
+  <div class="score-card">
+    <div id="fb-score" class="score-num">—</div>
+    <div class="score-of">out of 10</div>
+    <div id="fb-verdict" class="score-verdict"></div>
+  </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-      <!-- Strengths -->
-      <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-5">
-        <h3 class="text-green-400 font-semibold mb-3 flex items-center gap-2">
-          <span>✓</span> What worked
-        </h3>
-        <ul id="fb-strengths" class="space-y-2 text-sm text-gray-300"></ul>
-      </div>
-      <!-- Improvements -->
-      <div class="bg-red-500/5 border border-red-500/20 rounded-2xl p-5">
-        <h3 class="text-red-400 font-semibold mb-3 flex items-center gap-2">
-          <span>↑</span> Room to improve
-        </h3>
-        <ul id="fb-improvements" class="space-y-2 text-sm text-gray-300"></ul>
-      </div>
+  <div class="fb-grid">
+    <div class="fb-card" style="border:1px solid rgba(74,222,128,.15)">
+      <div class="fb-card-title" style="color:#4ade80">✓ What worked</div>
+      <ul id="fb-strengths"></ul>
     </div>
+    <div class="fb-card" style="border:1px solid rgba(248,113,113,.15)">
+      <div class="fb-card-title" style="color:#f87171">↑ Improve</div>
+      <ul id="fb-improvements"></ul>
+    </div>
+  </div>
 
-    <!-- Tip -->
-    <div class="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5 mb-8">
-      <h3 class="text-blue-400 font-semibold mb-2 flex items-center gap-2">
-        <span>💡</span> Try this next time
-      </h3>
-      <p id="fb-tip" class="text-sm text-gray-300"></p>
-    </div>
+  <div class="fb-tip">
+    <div class="fb-tip-label">💡 Try next time</div>
+    <p id="fb-tip"></p>
+  </div>
 
-    <div class="flex gap-3">
-      <button onclick="tryAgain()"
-        class="flex-1 py-3.5 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold transition-all">
-        Try Again
-      </button>
-      <button onclick="goLobby()"
-        class="flex-1 py-3.5 bg-gray-800 hover:bg-gray-700 rounded-xl font-semibold transition-all">
-        Change Prospect
-      </button>
-    </div>
+  <div class="fb-btns">
+    <button class="btn-retry" onclick="tryAgain()">Try Again</button>
+    <button class="btn-change" onclick="goLobby()">Change Prospect</button>
   </div>
 </div>
 
 <script>
-// ─── State ──────────────────────────────────────────────────────────────────
-let personas       = {};
-let selectedKey    = null;
-let callHistory    = [];
-let recognition    = null;
-let synth          = window.speechSynthesis;
-let isListening    = false;
-let isBotSpeaking  = false;
-let timerInterval  = null;
-let callSeconds    = 0;
-let currentText    = "";
+let personas={}, selectedKey=null, callHistory=[], recognition=null;
+let synth=window.speechSynthesis, isListening=false, isSpeaking=false;
+let timerInterval=null, callSeconds=0, currentText='';
 
-// ─── Init ────────────────────────────────────────────────────────────────────
-async function init() {
-  // Browser check
-  const hasSR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
-  if (!hasSR) {
-    document.getElementById('browser-warning').classList.remove('hidden');
-  }
-  // iOS Safari needs a user gesture before mic — handled naturally by the tap-to-speak flow
+const $=id=>document.getElementById(id);
 
-  const res  = await fetch('/api/personas');
-  personas   = await res.json();
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(id).classList.add('active');
+  window.scrollTo(0,0);
+}
 
-  const grid = document.getElementById('persona-grid');
-  const diffColor = { Easy: 'text-green-400', Medium: 'text-yellow-400', Hard: 'text-orange-400', 'Very Hard': 'text-red-400' };
+async function init(){
+  if(!('SpeechRecognition' in window)&&!('webkitSpeechRecognition' in window))
+    $('warn-box').style.display='block';
 
-  Object.entries(personas).forEach(([key, p]) => {
-    const card = document.createElement('div');
-    card.id    = `card-${key}`;
-    card.className = 'persona-card cursor-pointer bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-blue-500/50';
-    card.innerHTML = `
-      <div class="flex items-start justify-between mb-3">
-        <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-xl">${avatarEmoji(key)}</div>
-        <span class="text-xs font-medium ${diffColor[p.difficulty] || 'text-gray-400'}">${p.difficulty}</span>
+  const res=await fetch('/api/personas');
+  personas=await res.json();
+  const grid=$('persona-grid');
+  const diffMap={Easy:'Easy',Medium:'Medium',Hard:'Hard','Very Hard':'Very Hard'};
+  const emojiMap={gatekeeper:'📞',skeptic:'🤔',price_shopper:'💰',busy_exec:'⚡',warm_lead:'😊',referral:'🤝',inbound:'📋'};
+
+  Object.entries(personas).forEach(([key,p])=>{
+    const d=document.createElement('div');
+    d.className='pcard';
+    d.id='card-'+key;
+    d.innerHTML=`
+      <div class="pcard-icon">${emojiMap[key]||'👤'}</div>
+      <div class="pcard-info">
+        <div class="pcard-name">${p.name}</div>
+        <div class="pcard-title">${p.title}</div>
+        <div class="pcard-desc">${p.description}</div>
       </div>
-      <p class="font-semibold">${p.name}</p>
-      <p class="text-xs text-gray-500 mb-2">${p.title}</p>
-      <p class="text-xs text-gray-400 leading-relaxed">${p.description}</p>
-    `;
-    card.onclick = () => selectPersona(key);
-    grid.appendChild(card);
+      <div class="pcard-diff diff-${p.difficulty}">${p.difficulty}</div>`;
+    d.onclick=()=>selectPersona(key);
+    grid.appendChild(d);
   });
 }
 
-function avatarEmoji(key) {
-  return { gatekeeper: '📞', skeptic: '🤔', price_shopper: '💰', busy_exec: '⚡', warm_lead: '😊', referral: '🤝', inbound: '📋' }[key] || '👤';
+function selectPersona(key){
+  selectedKey=key;
+  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('card-'+key).classList.add('sel');
+  $('start-btn').disabled=false;
 }
 
-function selectPersona(key) {
-  selectedKey = key;
-  document.querySelectorAll('.persona-card').forEach(c => {
-    c.classList.remove('border-blue-500', 'bg-blue-500/5');
-    c.classList.add('border-gray-800');
-  });
-  const card = document.getElementById(`card-${key}`);
-  card.classList.remove('border-gray-800');
-  card.classList.add('border-blue-500', 'bg-blue-500/5');
-  document.getElementById('start-btn').disabled = false;
+function startCall(){
+  if(!selectedKey)return;
+  const p=personas[selectedKey];
+  callHistory=[];callSeconds=0;
+  $('transcript').innerHTML='';
+  $('call-name').textContent=p.name;
+  $('call-title').textContent=p.title;
+  $('dial-avatar').textContent=emojiFor(selectedKey);
+  $('dial-name').textContent=p.name;
+  $('dial-title').textContent=p.title;
+  show('dialing');
+  playRing();
+  // Simulate ringing for 2.5s then connect
+  setTimeout(()=>{
+    stopRing();
+    $('dial-status').textContent='Connected';
+    $('dial-status').style.color='#4ade80';
+    $('dial-status').style.animation='none';
+    setTimeout(()=>{
+      show('call');
+      timerInterval=setInterval(()=>{
+        callSeconds++;
+        const m=Math.floor(callSeconds/60),s=callSeconds%60;
+        $('timer').textContent=m+':'+(s<10?'0':'')+s;
+      },1000);
+      sendMessage('(call just connected — say hello as the prospect, keep it short)');
+    },800);
+  },2500);
 }
 
-// ─── Call start ──────────────────────────────────────────────────────────────
-function startCall() {
-  if (!selectedKey) return;
-  const p = personas[selectedKey];
-  callHistory = [];
-  callSeconds = 0;
-
-  document.getElementById('lobby').classList.add('hidden');
-  document.getElementById('call-screen').classList.remove('hidden');
-  document.getElementById('transcript').innerHTML = '';
-  document.getElementById('call-persona-name').textContent  = p.name;
-  document.getElementById('call-persona-title').textContent = p.title;
-
-  timerInterval = setInterval(() => {
-    callSeconds++;
-    const m = Math.floor(callSeconds / 60);
-    const s = callSeconds % 60;
-    document.getElementById('timer-display').textContent = `${m}:${s.toString().padStart(2, '0')}`;
-  }, 1000);
-
-  // Opening line from prospect
-  sendMessage("(call starts — greet the prospect)");
+function emojiFor(key){
+  return {gatekeeper:'📞',skeptic:'🤔',price_shopper:'💰',busy_exec:'⚡',warm_lead:'😊',referral:'🤝',inbound:'📋'}[key]||'👤';
 }
 
-// ─── Mic toggle ──────────────────────────────────────────────────────────────
-function toggleMic() {
-  if (isBotSpeaking) { synth.cancel(); isBotSpeaking = false; }
-  if (isListening)   { stopListening(); }
-  else               { startListening(); }
-}
-
-function startListening() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert('Your browser does not support speech recognition. Use Chrome or Edge.'); return; }
-
-  recognition = new SR();
-  recognition.continuous      = true;
-  recognition.interimResults  = true;
-  recognition.lang            = 'en-US';
-
-  recognition.onstart = () => {
-    isListening = true;
-    setStatus('listening');
-    document.getElementById('mic-btn').classList.add('bg-blue-600', 'border-blue-500');
-    document.getElementById('mic-btn').classList.remove('bg-gray-800', 'border-gray-700');
-    document.getElementById('mic-pulse').classList.remove('hidden');
-  };
-
-  recognition.onresult = (e) => {
-    let interim = '';
-    let final   = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript;
-      else                      interim += e.results[i][0].transcript;
+let ringCtx=null, ringNodes=[];
+function playRing(){
+  try{
+    ringCtx=new(window.AudioContext||window.webkitAudioContext)();
+    function beep(){
+      const o=ringCtx.createOscillator(), g=ringCtx.createGain();
+      o.connect(g);g.connect(ringCtx.destination);
+      o.frequency.value=480;g.gain.setValueAtTime(0.3,ringCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ringCtx.currentTime+0.8);
+      o.start();o.stop(ringCtx.currentTime+0.8);
+      ringNodes.push(o);
     }
-    document.getElementById('live-text').textContent = final || interim;
-    currentText = final || interim;
-  };
+    beep();
+    const id=setInterval(beep,1500);
+    ringNodes.push({stop:()=>clearInterval(id)});
+  }catch(e){}
+}
+function stopRing(){
+  ringNodes.forEach(n=>{try{n.stop();}catch(e){}});
+  ringNodes=[];
+  if(ringCtx){ringCtx.close();ringCtx=null;}
+}
 
-  recognition.onerror = (e) => {
-    console.error('SR error', e.error);
-    stopListening();
-  };
+function toggleMic(){
+  if(isSpeaking){synth.cancel();isSpeaking=false;}
+  isListening?stopListening():startListening();
+}
 
-  recognition.onend = () => {
-    if (isListening) {
-      // Auto-submit when speech ends
-      const text = currentText.trim();
-      if (text) { submitSpeech(text); }
-      isListening = false;
-      resetMicBtn();
+function startListening(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Voice not supported — use Chrome or Safari');return;}
+  recognition=new SR();
+  recognition.continuous=true;
+  recognition.interimResults=true;
+  recognition.lang='en-US';
+  recognition.onstart=()=>{
+    isListening=true;
+    setStatus('listen');
+    $('mic-btn').classList.add('on');
+    $('mic-ring').classList.add('active');
+  };
+  recognition.onresult=e=>{
+    let fin='',int='';
+    for(let i=e.resultIndex;i<e.results.length;i++)
+      e.results[i].isFinal?fin+=e.results[i][0].transcript:int+=e.results[i][0].transcript;
+    $('live-text').textContent=fin||int;
+    currentText=fin||int;
+  };
+  recognition.onerror=()=>{isListening=false;resetMic();};
+  recognition.onend=()=>{
+    if(isListening){
+      const t=currentText.trim();
+      if(t)submitSpeech(t);
+      isListening=false;resetMic();
     }
   };
-
   recognition.start();
 }
 
-function stopListening() {
-  if (recognition) { recognition.stop(); }
-  isListening = false;
-  resetMicBtn();
-  const text = currentText.trim();
-  if (text) { submitSpeech(text); }
+function stopListening(){
+  if(recognition)recognition.stop();
+  isListening=false;resetMic();
+  const t=currentText.trim();
+  if(t)submitSpeech(t);
 }
 
-function resetMicBtn() {
-  document.getElementById('mic-btn').classList.remove('bg-blue-600', 'border-blue-500');
-  document.getElementById('mic-btn').classList.add('bg-gray-800', 'border-gray-700');
-  document.getElementById('mic-pulse').classList.add('hidden');
+function resetMic(){
+  $('mic-btn').classList.remove('on');
+  $('mic-ring').classList.remove('active');
 }
 
-// ─── Message flow ────────────────────────────────────────────────────────────
-async function submitSpeech(text) {
-  currentText = '';
-  document.getElementById('live-text').textContent = '';
-  addMessage('user', text);
+async function submitSpeech(text){
+  currentText='';
+  $('live-text').textContent='';
+  addMsg('user',text);
   await sendMessage(text);
 }
 
-async function sendMessage(userText) {
-  setStatus('thinking');
-
-  // Add to history (skip the hidden opening trigger)
-  if (userText !== "(call starts — greet the prospect)") {
-    callHistory.push({ role: 'user', content: userText });
-  }
-
-  try {
-    const res = await fetch('/api/respond', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        persona:  selectedKey,
-        history:  callHistory,
-        message:  userText,
-      }),
+async function sendMessage(userText){
+  setStatus('think');
+  if(userText!=='(call starts — greet the prospect)')
+    callHistory.push({role:'user',content:userText});
+  try{
+    const r=await fetch('/api/respond',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({persona:selectedKey,history:callHistory,message:userText})
     });
-    const data = await res.json();
-    const reply = data.reply;
-
-    callHistory.push({ role: 'assistant', content: reply });
-
-    if (userText !== "(call starts — greet the prospect)") {
-      // Already added user message above
-    }
-    addMessage('bot', reply, data.persona_name);
-    speakText(reply);
-  } catch (err) {
+    const data=await r.json();
+    callHistory.push({role:'assistant',content:data.reply});
+    addMsg('bot',data.reply,data.persona_name);
+    speak(data.reply);
+  }catch{
     setStatus('idle');
-    addMessage('bot', '(connection error — check your API key)', '');
+    addMsg('bot','(connection error)','');
   }
 }
 
-function addMessage(role, text, name) {
-  const t = document.getElementById('transcript');
-  const div = document.createElement('div');
-  div.className = 'transcript-msg';
-
-  if (role === 'user') {
-    div.innerHTML = `
-      <div class="flex justify-end">
-        <div class="max-w-xs lg:max-w-md bg-blue-600 rounded-2xl rounded-br-sm px-4 py-2.5">
-          <p class="text-xs text-blue-200 mb-1">You</p>
-          <p class="text-sm leading-relaxed">${text}</p>
-        </div>
-      </div>`;
-  } else {
-    div.innerHTML = `
-      <div class="flex justify-start">
-        <div class="max-w-xs lg:max-w-md bg-gray-800 border border-gray-700 rounded-2xl rounded-bl-sm px-4 py-2.5">
-          <p class="text-xs text-gray-400 mb-1">${name || ''}</p>
-          <p class="text-sm leading-relaxed">${text}</p>
-        </div>
-      </div>`;
+function addMsg(role,text,name){
+  const t=$('transcript');
+  const d=document.createElement('div');
+  d.className='msg msg-'+(role==='user'?'you':'bot');
+  if(role==='user'){
+    d.innerHTML=`<div class="bubble bubble-you">${text}</div>`;
+  }else{
+    d.innerHTML=`<div class="bubble bubble-bot"><div class="bubble-name">${name||''}</div>${text}</div>`;
   }
-
-  t.appendChild(div);
-  t.scrollTop = t.scrollHeight;
+  t.appendChild(d);
+  t.scrollTop=t.scrollHeight;
 }
 
-// ─── TTS ─────────────────────────────────────────────────────────────────────
-function speakText(text) {
+function speak(text){
   synth.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate  = 1.05;
-  utt.pitch = 1.0;
-
-  // Pick a voice
-  const voices = synth.getVoices();
-  const preferred = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
-    || voices.find(v => v.lang === 'en-US')
-    || voices[0];
-  if (preferred) utt.voice = preferred;
-
-  setStatus('speaking');
-  isBotSpeaking = true;
-
-  utt.onend = () => {
-    isBotSpeaking = false;
-    setStatus('idle');
-  };
-  utt.onerror = () => {
-    isBotSpeaking = false;
-    setStatus('idle');
-  };
-
-  synth.speak(utt);
+  const u=new SpeechSynthesisUtterance(text);
+  u.rate=1.05;
+  const voices=synth.getVoices();
+  const v=voices.find(v=>v.lang==='en-US'&&v.name.includes('Google'))||voices.find(v=>v.lang==='en-US')||voices[0];
+  if(v)u.voice=v;
+  setStatus('speak');isSpeaking=true;
+  u.onend=u.onerror=()=>{isSpeaking=false;setStatus('idle');};
+  synth.speak(u);
 }
 
-// ─── Status ──────────────────────────────────────────────────────────────────
-function setStatus(state) {
-  ['idle', 'listening', 'thinking', 'speaking'].forEach(s => {
-    document.getElementById(`status-${s}`).classList.add('hidden');
-  });
-  document.getElementById(`status-${state}`).classList.remove('hidden');
+function setStatus(s){
+  ['idle','listen','think','speak'].forEach(x=>$('s-'+x).style.display='none');
+  $('s-'+s).style.display='flex';
 }
 
-// ─── End call ────────────────────────────────────────────────────────────────
-async function endCall() {
+async function endCall(){
   clearInterval(timerInterval);
   synth.cancel();
-  if (recognition) recognition.stop();
-  isListening = false;
-
-  document.getElementById('call-screen').classList.add('hidden');
-  document.getElementById('feedback-screen').classList.remove('hidden');
-
-  // Show loading state
-  document.getElementById('fb-score').textContent   = '...';
-  document.getElementById('fb-verdict').textContent = 'Analyzing your call...';
-  document.getElementById('fb-strengths').innerHTML    = '';
-  document.getElementById('fb-improvements').innerHTML = '';
-  document.getElementById('fb-tip').textContent       = '';
-
-  try {
-    const res = await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona: selectedKey, history: callHistory }),
+  if(recognition)recognition.stop();
+  isListening=false;
+  show('feedback');
+  $('fb-score').textContent='...';
+  $('fb-verdict').textContent='Analyzing your call...';
+  $('fb-strengths').innerHTML='';
+  $('fb-improvements').innerHTML='';
+  $('fb-tip').textContent='';
+  try{
+    const r=await fetch('/api/feedback',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({persona:selectedKey,history:callHistory})
     });
-    const fb = await res.json();
-
-    document.getElementById('fb-score').textContent   = fb.score ?? '—';
-    document.getElementById('fb-verdict').textContent = fb.verdict || '';
-    document.getElementById('fb-tip').textContent     = fb.tip || '';
-
-    const renderList = (elId, items) => {
-      const el = document.getElementById(elId);
-      (items || []).forEach(item => {
-        const li = document.createElement('li');
-        li.className = 'flex gap-2';
-        li.innerHTML = `<span class="mt-0.5 shrink-0">•</span><span>${item}</span>`;
+    const fb=await r.json();
+    $('fb-score').textContent=fb.score??'—';
+    $('fb-verdict').textContent=fb.verdict||'';
+    $('fb-tip').textContent=fb.tip||'';
+    const list=(elId,items)=>{
+      const el=$(elId);
+      (items||[]).forEach(item=>{
+        const li=document.createElement('li');
+        li.innerHTML=`<span>•</span><span>${item}</span>`;
         el.appendChild(li);
       });
     };
-    renderList('fb-strengths',    fb.strengths);
-    renderList('fb-improvements', fb.improvements);
-
-  } catch (err) {
-    document.getElementById('fb-score').textContent   = '—';
-    document.getElementById('fb-verdict').textContent = 'Could not generate feedback. Check API key.';
+    list('fb-strengths',fb.strengths);
+    list('fb-improvements',fb.improvements);
+  }catch{
+    $('fb-score').textContent='—';
+    $('fb-verdict').textContent='Could not generate feedback.';
   }
 }
 
-function tryAgain() {
-  document.getElementById('feedback-screen').classList.add('hidden');
-  startCall();
-}
+function tryAgain(){show('call');startCall();}
+function goLobby(){show('lobby');}
 
-function goLobby() {
-  document.getElementById('feedback-screen').classList.add('hidden');
-  document.getElementById('lobby').classList.remove('hidden');
-}
-
-// ─── Boot ────────────────────────────────────────────────────────────────────
 init();
 </script>
 </body>
