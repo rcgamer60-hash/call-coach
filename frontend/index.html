@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PitchCoach — Sales Call Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { font-family: 'Inter', sans-serif; }
+
+    .pulse-ring {
+      animation: pulse-ring 1.4s ease-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(0.8); opacity: 1; }
+      80%, 100% { transform: scale(2); opacity: 0; }
+    }
+
+    .wave-bar {
+      animation: wave 0.9s ease-in-out infinite;
+    }
+    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+    .wave-bar:nth-child(5) { animation-delay: 0.4s; }
+    @keyframes wave {
+      0%, 100% { height: 8px; }
+      50%       { height: 28px; }
+    }
+
+    .speaking-dot {
+      animation: speaking 0.6s ease-in-out infinite alternate;
+    }
+    @keyframes speaking {
+      from { opacity: 0.3; transform: scale(0.8); }
+      to   { opacity: 1;   transform: scale(1.2); }
+    }
+
+    .persona-card { transition: all 0.2s ease; }
+    .persona-card:hover { transform: translateY(-2px); }
+    .persona-card.selected { ring: 2px; }
+
+    .transcript-msg { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+  </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen">
+
+<!-- ═══════════════════════════════════════════════════ LOBBY ═══ -->
+<div id="lobby" class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+  <div class="w-full max-w-3xl">
+
+    <!-- Header -->
+    <div class="text-center mb-10">
+      <div class="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5 mb-4">
+        <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+        <span class="text-blue-400 text-sm font-medium">AI Sales Training</span>
+      </div>
+      <h1 class="text-4xl font-bold mb-3">PitchCoach</h1>
+      <p class="text-gray-400 text-lg">Practice cold calls with AI prospects that push back like real buyers.</p>
+    </div>
+
+    <!-- Persona grid -->
+    <p class="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">Choose your prospect</p>
+    <div id="persona-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8"></div>
+
+    <!-- Browser check -->
+    <div id="browser-warning" class="hidden bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6 text-sm text-yellow-300">
+      ⚠️ Voice features require Chrome or Edge. Other browsers may not support the microphone.
+    </div>
+
+    <!-- Start button -->
+    <button id="start-btn" onclick="startCall()"
+      class="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl font-semibold text-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+      disabled>
+      Start Call
+    </button>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ CALL ════ -->
+<div id="call-screen" class="hidden min-h-screen flex flex-col">
+
+  <!-- Top bar -->
+  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+    <div class="flex items-center gap-3">
+      <div id="call-indicator" class="w-2.5 h-2.5 rounded-full bg-red-500 speaking-dot"></div>
+      <span id="timer-display" class="font-mono text-sm text-gray-300">0:00</span>
+    </div>
+    <div class="text-center">
+      <p id="call-persona-name" class="font-semibold"></p>
+      <p id="call-persona-title" class="text-xs text-gray-500"></p>
+    </div>
+    <button onclick="endCall()"
+      class="bg-red-600 hover:bg-red-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-all">
+      End Call
+    </button>
+  </div>
+
+  <!-- Transcript -->
+  <div id="transcript" class="flex-1 overflow-y-auto px-6 py-4 space-y-3 max-w-2xl w-full mx-auto"></div>
+
+  <!-- Bottom mic area -->
+  <div class="border-t border-gray-800 px-6 py-5">
+    <div class="max-w-2xl mx-auto">
+
+      <!-- Status line -->
+      <div id="status-bar" class="flex items-center justify-center gap-2 mb-4 h-8">
+        <div id="status-idle" class="text-gray-500 text-sm">Press the button and speak</div>
+        <div id="status-listening" class="hidden flex items-center gap-2">
+          <div class="flex gap-1 items-center">
+            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
+            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
+            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
+            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
+            <div class="wave-bar w-1 bg-blue-400 rounded-full"></div>
+          </div>
+          <span class="text-blue-400 text-sm">Listening...</span>
+        </div>
+        <div id="status-thinking" class="hidden text-yellow-400 text-sm flex items-center gap-2">
+          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          Responding...
+        </div>
+        <div id="status-speaking" class="hidden text-green-400 text-sm">🔊 Speaking...</div>
+      </div>
+
+      <!-- Live transcript preview -->
+      <div id="live-text" class="text-gray-400 text-sm text-center italic mb-4 min-h-5"></div>
+
+      <!-- Mic button -->
+      <div class="flex justify-center">
+        <div class="relative">
+          <div id="mic-pulse" class="hidden absolute inset-0 rounded-full bg-blue-500 pulse-ring"></div>
+          <button id="mic-btn" onclick="toggleMic()"
+            class="relative w-16 h-16 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 flex items-center justify-center transition-all">
+            <svg id="mic-icon" class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-2 15.93A8 8 0 0020 11h-2a6 6 0 01-12 0H4a8 8 0 006 5.93V19H7v2h10v-2h-3v-2.07z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <p class="text-center text-xs text-gray-600 mt-3">Tap to speak · Tap again to send</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ FEEDBACK ═ -->
+<div id="feedback-screen" class="hidden min-h-screen flex flex-col items-center justify-center px-4 py-12">
+  <div class="w-full max-w-2xl">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-bold mb-2">Call Review</h2>
+      <p class="text-gray-400">Here's how your pitch went</p>
+    </div>
+
+    <!-- Score -->
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-4 text-center">
+      <div id="fb-score" class="text-6xl font-bold mb-2 text-blue-400"></div>
+      <div class="text-gray-400 text-sm mb-3">out of 10</div>
+      <div id="fb-verdict" class="text-lg font-medium text-white"></div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+      <!-- Strengths -->
+      <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-5">
+        <h3 class="text-green-400 font-semibold mb-3 flex items-center gap-2">
+          <span>✓</span> What worked
+        </h3>
+        <ul id="fb-strengths" class="space-y-2 text-sm text-gray-300"></ul>
+      </div>
+      <!-- Improvements -->
+      <div class="bg-red-500/5 border border-red-500/20 rounded-2xl p-5">
+        <h3 class="text-red-400 font-semibold mb-3 flex items-center gap-2">
+          <span>↑</span> Room to improve
+        </h3>
+        <ul id="fb-improvements" class="space-y-2 text-sm text-gray-300"></ul>
+      </div>
+    </div>
+
+    <!-- Tip -->
+    <div class="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5 mb-8">
+      <h3 class="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+        <span>💡</span> Try this next time
+      </h3>
+      <p id="fb-tip" class="text-sm text-gray-300"></p>
+    </div>
+
+    <div class="flex gap-3">
+      <button onclick="tryAgain()"
+        class="flex-1 py-3.5 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold transition-all">
+        Try Again
+      </button>
+      <button onclick="goLobby()"
+        class="flex-1 py-3.5 bg-gray-800 hover:bg-gray-700 rounded-xl font-semibold transition-all">
+        Change Prospect
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────────────
+let personas       = {};
+let selectedKey    = null;
+let callHistory    = [];
+let recognition    = null;
+let synth          = window.speechSynthesis;
+let isListening    = false;
+let isBotSpeaking  = false;
+let timerInterval  = null;
+let callSeconds    = 0;
+let currentText    = "";
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+async function init() {
+  // Browser check
+  if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+    document.getElementById('browser-warning').classList.remove('hidden');
+  }
+
+  const res  = await fetch('/api/personas');
+  personas   = await res.json();
+
+  const grid = document.getElementById('persona-grid');
+  const diffColor = { Easy: 'text-green-400', Medium: 'text-yellow-400', Hard: 'text-orange-400', 'Very Hard': 'text-red-400' };
+
+  Object.entries(personas).forEach(([key, p]) => {
+    const card = document.createElement('div');
+    card.id    = `card-${key}`;
+    card.className = 'persona-card cursor-pointer bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-blue-500/50';
+    card.innerHTML = `
+      <div class="flex items-start justify-between mb-3">
+        <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center text-xl">${avatarEmoji(key)}</div>
+        <span class="text-xs font-medium ${diffColor[p.difficulty] || 'text-gray-400'}">${p.difficulty}</span>
+      </div>
+      <p class="font-semibold">${p.name}</p>
+      <p class="text-xs text-gray-500 mb-2">${p.title}</p>
+      <p class="text-xs text-gray-400 leading-relaxed">${p.description}</p>
+    `;
+    card.onclick = () => selectPersona(key);
+    grid.appendChild(card);
+  });
+}
+
+function avatarEmoji(key) {
+  return { gatekeeper: '📞', skeptic: '🤔', price_shopper: '💰', busy_exec: '⚡', warm_lead: '😊' }[key] || '👤';
+}
+
+function selectPersona(key) {
+  selectedKey = key;
+  document.querySelectorAll('.persona-card').forEach(c => {
+    c.classList.remove('border-blue-500', 'bg-blue-500/5');
+    c.classList.add('border-gray-800');
+  });
+  const card = document.getElementById(`card-${key}`);
+  card.classList.remove('border-gray-800');
+  card.classList.add('border-blue-500', 'bg-blue-500/5');
+  document.getElementById('start-btn').disabled = false;
+}
+
+// ─── Call start ──────────────────────────────────────────────────────────────
+function startCall() {
+  if (!selectedKey) return;
+  const p = personas[selectedKey];
+  callHistory = [];
+  callSeconds = 0;
+
+  document.getElementById('lobby').classList.add('hidden');
+  document.getElementById('call-screen').classList.remove('hidden');
+  document.getElementById('transcript').innerHTML = '';
+  document.getElementById('call-persona-name').textContent  = p.name;
+  document.getElementById('call-persona-title').textContent = p.title;
+
+  timerInterval = setInterval(() => {
+    callSeconds++;
+    const m = Math.floor(callSeconds / 60);
+    const s = callSeconds % 60;
+    document.getElementById('timer-display').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  }, 1000);
+
+  // Opening line from prospect
+  sendMessage("(call starts — greet the prospect)");
+}
+
+// ─── Mic toggle ──────────────────────────────────────────────────────────────
+function toggleMic() {
+  if (isBotSpeaking) { synth.cancel(); isBotSpeaking = false; }
+  if (isListening)   { stopListening(); }
+  else               { startListening(); }
+}
+
+function startListening() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Your browser does not support speech recognition. Use Chrome or Edge.'); return; }
+
+  recognition = new SR();
+  recognition.continuous      = true;
+  recognition.interimResults  = true;
+  recognition.lang            = 'en-US';
+
+  recognition.onstart = () => {
+    isListening = true;
+    setStatus('listening');
+    document.getElementById('mic-btn').classList.add('bg-blue-600', 'border-blue-500');
+    document.getElementById('mic-btn').classList.remove('bg-gray-800', 'border-gray-700');
+    document.getElementById('mic-pulse').classList.remove('hidden');
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final   = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else                      interim += e.results[i][0].transcript;
+    }
+    document.getElementById('live-text').textContent = final || interim;
+    currentText = final || interim;
+  };
+
+  recognition.onerror = (e) => {
+    console.error('SR error', e.error);
+    stopListening();
+  };
+
+  recognition.onend = () => {
+    if (isListening) {
+      // Auto-submit when speech ends
+      const text = currentText.trim();
+      if (text) { submitSpeech(text); }
+      isListening = false;
+      resetMicBtn();
+    }
+  };
+
+  recognition.start();
+}
+
+function stopListening() {
+  if (recognition) { recognition.stop(); }
+  isListening = false;
+  resetMicBtn();
+  const text = currentText.trim();
+  if (text) { submitSpeech(text); }
+}
+
+function resetMicBtn() {
+  document.getElementById('mic-btn').classList.remove('bg-blue-600', 'border-blue-500');
+  document.getElementById('mic-btn').classList.add('bg-gray-800', 'border-gray-700');
+  document.getElementById('mic-pulse').classList.add('hidden');
+}
+
+// ─── Message flow ────────────────────────────────────────────────────────────
+async function submitSpeech(text) {
+  currentText = '';
+  document.getElementById('live-text').textContent = '';
+  addMessage('user', text);
+  await sendMessage(text);
+}
+
+async function sendMessage(userText) {
+  setStatus('thinking');
+
+  // Add to history (skip the hidden opening trigger)
+  if (userText !== "(call starts — greet the prospect)") {
+    callHistory.push({ role: 'user', content: userText });
+  }
+
+  try {
+    const res = await fetch('/api/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        persona:  selectedKey,
+        history:  callHistory,
+        message:  userText,
+      }),
+    });
+    const data = await res.json();
+    const reply = data.reply;
+
+    callHistory.push({ role: 'assistant', content: reply });
+
+    if (userText !== "(call starts — greet the prospect)") {
+      // Already added user message above
+    }
+    addMessage('bot', reply, data.persona_name);
+    speakText(reply);
+  } catch (err) {
+    setStatus('idle');
+    addMessage('bot', '(connection error — check your API key)', '');
+  }
+}
+
+function addMessage(role, text, name) {
+  const t = document.getElementById('transcript');
+  const div = document.createElement('div');
+  div.className = 'transcript-msg';
+
+  if (role === 'user') {
+    div.innerHTML = `
+      <div class="flex justify-end">
+        <div class="max-w-xs lg:max-w-md bg-blue-600 rounded-2xl rounded-br-sm px-4 py-2.5">
+          <p class="text-xs text-blue-200 mb-1">You</p>
+          <p class="text-sm leading-relaxed">${text}</p>
+        </div>
+      </div>`;
+  } else {
+    div.innerHTML = `
+      <div class="flex justify-start">
+        <div class="max-w-xs lg:max-w-md bg-gray-800 border border-gray-700 rounded-2xl rounded-bl-sm px-4 py-2.5">
+          <p class="text-xs text-gray-400 mb-1">${name || ''}</p>
+          <p class="text-sm leading-relaxed">${text}</p>
+        </div>
+      </div>`;
+  }
+
+  t.appendChild(div);
+  t.scrollTop = t.scrollHeight;
+}
+
+// ─── TTS ─────────────────────────────────────────────────────────────────────
+function speakText(text) {
+  synth.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate  = 1.05;
+  utt.pitch = 1.0;
+
+  // Pick a voice
+  const voices = synth.getVoices();
+  const preferred = voices.find(v => v.lang === 'en-US' && v.name.includes('Google'))
+    || voices.find(v => v.lang === 'en-US')
+    || voices[0];
+  if (preferred) utt.voice = preferred;
+
+  setStatus('speaking');
+  isBotSpeaking = true;
+
+  utt.onend = () => {
+    isBotSpeaking = false;
+    setStatus('idle');
+  };
+  utt.onerror = () => {
+    isBotSpeaking = false;
+    setStatus('idle');
+  };
+
+  synth.speak(utt);
+}
+
+// ─── Status ──────────────────────────────────────────────────────────────────
+function setStatus(state) {
+  ['idle', 'listening', 'thinking', 'speaking'].forEach(s => {
+    document.getElementById(`status-${s}`).classList.add('hidden');
+  });
+  document.getElementById(`status-${state}`).classList.remove('hidden');
+}
+
+// ─── End call ────────────────────────────────────────────────────────────────
+async function endCall() {
+  clearInterval(timerInterval);
+  synth.cancel();
+  if (recognition) recognition.stop();
+  isListening = false;
+
+  document.getElementById('call-screen').classList.add('hidden');
+  document.getElementById('feedback-screen').classList.remove('hidden');
+
+  // Show loading state
+  document.getElementById('fb-score').textContent   = '...';
+  document.getElementById('fb-verdict').textContent = 'Analyzing your call...';
+  document.getElementById('fb-strengths').innerHTML    = '';
+  document.getElementById('fb-improvements').innerHTML = '';
+  document.getElementById('fb-tip').textContent       = '';
+
+  try {
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona: selectedKey, history: callHistory }),
+    });
+    const fb = await res.json();
+
+    document.getElementById('fb-score').textContent   = fb.score ?? '—';
+    document.getElementById('fb-verdict').textContent = fb.verdict || '';
+    document.getElementById('fb-tip').textContent     = fb.tip || '';
+
+    const renderList = (elId, items) => {
+      const el = document.getElementById(elId);
+      (items || []).forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'flex gap-2';
+        li.innerHTML = `<span class="mt-0.5 shrink-0">•</span><span>${item}</span>`;
+        el.appendChild(li);
+      });
+    };
+    renderList('fb-strengths',    fb.strengths);
+    renderList('fb-improvements', fb.improvements);
+
+  } catch (err) {
+    document.getElementById('fb-score').textContent   = '—';
+    document.getElementById('fb-verdict').textContent = 'Could not generate feedback. Check API key.';
+  }
+}
+
+function tryAgain() {
+  document.getElementById('feedback-screen').classList.add('hidden');
+  startCall();
+}
+
+function goLobby() {
+  document.getElementById('feedback-screen').classList.add('hidden');
+  document.getElementById('lobby').classList.remove('hidden');
+}
+
+// ─── Boot ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
