@@ -74,7 +74,7 @@
 
     <!-- Browser check -->
     <div id="browser-warning" class="hidden bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6 text-sm text-yellow-300">
-      ⚠️ Voice features require Chrome or Edge. Other browsers may not support the microphone.
+      ⚠️ Voice requires Chrome (Android/desktop) or Safari (iPhone/iPad). Other browsers may not support the mic.
     </div>
 
     <!-- Start button -->
@@ -144,8 +144,9 @@
         <div class="relative">
           <div id="mic-pulse" class="hidden absolute inset-0 rounded-full bg-blue-500 pulse-ring"></div>
           <button id="mic-btn" onclick="toggleMic()"
-            class="relative w-16 h-16 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 flex items-center justify-center transition-all">
-            <svg id="mic-icon" class="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+            class="relative w-20 h-20 rounded-full bg-gray-800 active:bg-gray-600 border border-gray-700 flex items-center justify-center transition-all touch-manipulation"
+            style="-webkit-tap-highlight-color: transparent;">
+            <svg id="mic-icon" class="w-9 h-9 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm-2 15.93A8 8 0 0020 11h-2a6 6 0 01-12 0H4a8 8 0 006 5.93V19H7v2h10v-2h-3v-2.07z"/>
             </svg>
           </button>
@@ -226,9 +227,11 @@ let currentText    = "";
 // ─── Init ────────────────────────────────────────────────────────────────────
 async function init() {
   // Browser check
-  if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
+  const hasSR = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+  if (!hasSR) {
     document.getElementById('browser-warning').classList.remove('hidden');
   }
+  // iOS Safari needs a user gesture before mic — handled naturally by the tap-to-speak flow
 
   const res  = await fetch('/api/personas');
   personas   = await res.json();
