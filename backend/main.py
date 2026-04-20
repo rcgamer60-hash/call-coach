@@ -308,15 +308,7 @@ async def call_incoming():
     """Route incoming call to ConversationRelay WebSocket."""
     vr = VoiceResponse()
     connect = Connect()
-    connect.conversation_relay(
-        url="wss://call-coach-zace.onrender.com/call/stream",
-        tts_provider="Amazon",
-        voice="Polly.Ruth-Generative",
-        transcription_provider="Deepgram",
-        speech_model="nova-2",
-        language="en-US",
-        interrupt_by_dtmf=False,
-    )
+    connect.conversation_relay(url="wss://call-coach-zace.onrender.com/call/stream")
     vr.append(connect)
     return _xml(str(vr))
 
@@ -380,12 +372,6 @@ async def call_stream(websocket: WebSocket):
                                 "last": False,
                             }))
                     await websocket.send_text(json.dumps({"type": "text", "token": "", "last": True}))
-
-                    # Update voice for this persona
-                    await websocket.send_text(json.dumps({
-                        "type": "config",
-                        "voice": voice,
-                    }))
 
                     session["history"] = [
                         {"role": "user", "content": greeting_prompt},
