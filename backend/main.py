@@ -1,14 +1,16 @@
 import os
 import json
+import time
 from typing import Optional
 
 import anthropic
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from twilio.twiml.voice_response import Gather, VoiceResponse
 
 load_dotenv(dotenv_path="../.env")
 
@@ -257,3 +259,236 @@ async def feedback(req: FeedbackRequest):
         data = {"score": None, "verdict": raw, "strengths": [], "improvements": [], "tip": ""}
 
     return data
+
+
+# ---------------------------------------------------------------------------
+# Twilio phone call backend
+# ---------------------------------------------------------------------------
+
+# In-memory call sessions keyed by Twilio CallSid
+call_sessions: dict[str, dict] = {}
+
+PERSONA_MENU = (
+    "Press 1 for Linda, the gatekeeper. "
+    "Press 2 for Marcus, the skeptical VP. "
+    "Press 3 for David, the busy CEO. "
+    "Press 4 for Jennifer, a warm lead. "
+    "Press 5 for Sarah, the price shopper. "
+    "Press 6 for Ryan, an inbound lead."
+)
+
+DIGIT_TO_PERSONA = {
+    "1": "gatekeeper",
+    "2": "skeptic",
+    "3": "busy_exec",
+    "4": "warm_lead",
+    "5": "price_shopper",
+    "6": "inbound",
+}
+
+PERSONA_VOICE = {
+    "gatekeeper": "Polly.Joanna",
+    "skeptic": "Polly.Matthew",
+    "busy_exec": "Polly.Matthew",
+    "warm_lead": "Polly.Joanna",
+    "price_shopper": "Polly.Joanna",
+    "inbound": "Polly.Matthew",
+    "referral": "Polly.Joanna",
+}
+
+
+def _twiml_response(text: str, voice: str, gather_action: str, hints: str = "") -> str:
+    vr = VoiceResponse()
+    gather = Gather(
+        input="speech",
+        action=gather_action,
+        method="POST",
+        speech_timeout="auto",
+        language="en-US",
+        hints=hints,
+    )
+    gather.say(text, voice=voice)
+    vr.append(gather)
+    # If no input, reprompt
+    vr.say("I didn't catch that. Let me connect you again.", voice=voice)
+    vr.redirect(gather_action, method="POST")
+    return str(vr)
+
+
+def _xml(content: str):
+    return Response(content=content, media_type="application/xml")
+
+
+@app.post("/call/incoming")
+async def call_incoming(CallSid: str = Form(...)):
+    """Entry point — play persona menu."""
+    call_sessions[CallSid] = {"history": [], "persona": None, "product": None}
+    vr = VoiceResponse()
+    gather = Gather(
+        num_digits=1,
+        action="/call/menu",
+        method="POST",
+        timeout=10,
+    )
+    gather.say(
+        "Welcome to Call Coach. Choose your prospect. " + PERSONA_MENU,
+        voice="Polly.Joanna",
+    )
+    vr.append(gather)
+    vr.redirect("/call/incoming", method="POST")
+    return _xml(str(vr))
+
+
+@app.post("/call/menu")
+async def call_menu(CallSid: str = Form(...), Digits: str = Form(default="")):
+    """Handle digit press — ask what they're selling."""
+    persona_key = DIGIT_TO_PERSONA.get(Digits)
+    if not persona_key:
+        vr = VoiceResponse()
+        vr.say("Invalid selection.", voice="Polly.Joanna")
+        vr.redirect("/call/incoming", method="POST")
+        return _xml(str(vr))
+
+    session = call_sessions.setdefault(CallSid, {"history": [], "product": None})
+    session["persona"] = persona_key
+    persona = PERSONAS[persona_key]
+    voice = PERSONA_VOICE[persona_key]
+
+    vr = VoiceResponse()
+    gather = Gather(
+        input="speech",
+        action="/call/got-product",
+        method="POST",
+        speech_timeout="auto",
+        language="en-US",
+    )
+    gather.say(
+        f"You'll be speaking with {persona['name']}, {persona['title']}. "
+        "Before we connect, briefly tell me what you're selling.",
+        voice="Polly.Joanna",
+    )
+    vr.append(gather)
+    vr.redirect("/call/menu", method="POST")
+    return _xml(str(vr))
+
+
+@app.post("/call/got-product")
+async def call_got_product(
+    CallSid: str = Form(...),
+    SpeechResult: str = Form(default=""),
+):
+    """Capture product context, then trigger Claude greeting."""
+    session = call_sessions.get(CallSid)
+    if not session:
+        vr = VoiceResponse()
+        vr.say("Session expired. Please call back.")
+        vr.hangup()
+        return _xml(str(vr))
+
+    session["product"] = SpeechResult.strip() or "general sales"
+    persona_key = session["persona"]
+    persona = PERSONAS[persona_key]
+    voice = PERSONA_VOICE[persona_key]
+
+    # Get Claude greeting
+    system = persona["system"]
+    if session["product"]:
+        system += (
+            f"\n\nThe salesperson is selling: {session['product']}. "
+            "Make all your responses specific to that industry and product. "
+            "Every call should feel fresh and different."
+        )
+
+    greeting_prompt = (
+        f"(The call just connected. You are {persona['name']}, {persona['title']}. "
+        "Answer the phone naturally — one short sentence, just like a real call.)"
+    )
+
+    client = ai_client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=100,
+        system=system,
+        messages=[{"role": "user", "content": greeting_prompt}],
+        temperature=1,
+    )
+    greeting = resp.content[0].text.strip()
+    session["history"] = [
+        {"role": "user", "content": greeting_prompt},
+        {"role": "assistant", "content": greeting},
+    ]
+
+    return _xml(
+        _twiml_response(
+            greeting,
+            voice,
+            "/call/respond",
+            hints="yes,no,okay,sure,tell me more,I'm interested,not interested",
+        )
+    )
+
+
+@app.post("/call/respond")
+async def call_respond(
+    CallSid: str = Form(...),
+    SpeechResult: str = Form(default=""),
+):
+    """Process what the salesperson said, get Claude reply, keep going."""
+    session = call_sessions.get(CallSid)
+    if not session or not session.get("persona"):
+        vr = VoiceResponse()
+        vr.say("Session expired.")
+        vr.hangup()
+        return _xml(str(vr))
+
+    user_speech = SpeechResult.strip()
+    if not user_speech:
+        persona_key = session["persona"]
+        voice = PERSONA_VOICE[persona_key]
+        vr = VoiceResponse()
+        gather = Gather(
+            input="speech",
+            action="/call/respond",
+            method="POST",
+            speech_timeout="auto",
+        )
+        gather.say("Go ahead, I'm listening.", voice=voice)
+        vr.append(gather)
+        return _xml(str(vr))
+
+    persona_key = session["persona"]
+    persona = PERSONAS[persona_key]
+    voice = PERSONA_VOICE[persona_key]
+
+    system = persona["system"]
+    if session.get("product"):
+        system += (
+            f"\n\nThe salesperson is selling: {session['product']}. "
+            "Make all your responses specific to that industry and product. "
+            "Every call should feel fresh and different."
+        )
+
+    session["history"].append({"role": "user", "content": user_speech})
+
+    client = ai_client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=150,
+        system=system,
+        messages=session["history"],
+        temperature=1,
+    )
+    reply = resp.content[0].text.strip()
+    session["history"].append({"role": "assistant", "content": reply})
+
+    return _xml(
+        _twiml_response(reply, voice, "/call/respond")
+    )
+
+
+@app.post("/call/status")
+async def call_status(CallSid: str = Form(...), CallStatus: str = Form(default="")):
+    """Cleanup session when call ends."""
+    if CallStatus in ("completed", "failed", "busy", "no-answer", "canceled"):
+        call_sessions.pop(CallSid, None)
+    return {"ok": True}

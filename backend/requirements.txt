@@ -4,3 +4,4 @@ anthropic>=0.40.0
 python-dotenv>=1.0.0
 pydantic>=2.9.0
 python-multipart>=0.0.9
+twilio>=8.0.0
