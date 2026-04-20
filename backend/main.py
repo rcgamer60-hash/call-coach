@@ -265,26 +265,9 @@ async def feedback(req: FeedbackRequest):
 # Twilio phone call backend
 # ---------------------------------------------------------------------------
 
-# In-memory call sessions keyed by Twilio CallSid
+import random
+
 call_sessions: dict[str, dict] = {}
-
-PERSONA_MENU = (
-    "Press 1 for Linda, the gatekeeper. "
-    "Press 2 for Marcus, the skeptical VP. "
-    "Press 3 for David, the busy CEO. "
-    "Press 4 for Jennifer, a warm lead. "
-    "Press 5 for Sarah, the price shopper. "
-    "Press 6 for Ryan, an inbound lead."
-)
-
-DIGIT_TO_PERSONA = {
-    "1": "gatekeeper",
-    "2": "skeptic",
-    "3": "busy_exec",
-    "4": "warm_lead",
-    "5": "price_shopper",
-    "6": "inbound",
-}
 
 PERSONA_VOICE = {
     "gatekeeper": "Polly.Joanna",
@@ -309,8 +292,7 @@ def _twiml_response(text: str, voice: str, gather_action: str, hints: str = "") 
     )
     gather.say(text, voice=voice)
     vr.append(gather)
-    # If no input, reprompt
-    vr.say("I didn't catch that. Let me connect you again.", voice=voice)
+    vr.say("I didn't catch that.", voice=voice)
     vr.redirect(gather_action, method="POST")
     return str(vr)
 
@@ -321,39 +303,8 @@ def _xml(content: str):
 
 @app.post("/call/incoming")
 async def call_incoming(CallSid: str = Form(...)):
-    """Entry point — play persona menu."""
+    """Entry point — ask what they're selling, then drop straight into the call."""
     call_sessions[CallSid] = {"history": [], "persona": None, "product": None}
-    vr = VoiceResponse()
-    gather = Gather(
-        num_digits=1,
-        action="/call/menu",
-        method="POST",
-        timeout=10,
-    )
-    gather.say(
-        "Welcome to Call Coach. Choose your prospect. " + PERSONA_MENU,
-        voice="Polly.Joanna",
-    )
-    vr.append(gather)
-    vr.redirect("/call/incoming", method="POST")
-    return _xml(str(vr))
-
-
-@app.post("/call/menu")
-async def call_menu(CallSid: str = Form(...), Digits: str = Form(default="")):
-    """Handle digit press — ask what they're selling."""
-    persona_key = DIGIT_TO_PERSONA.get(Digits)
-    if not persona_key:
-        vr = VoiceResponse()
-        vr.say("Invalid selection.", voice="Polly.Joanna")
-        vr.redirect("/call/incoming", method="POST")
-        return _xml(str(vr))
-
-    session = call_sessions.setdefault(CallSid, {"history": [], "product": None})
-    session["persona"] = persona_key
-    persona = PERSONAS[persona_key]
-    voice = PERSONA_VOICE[persona_key]
-
     vr = VoiceResponse()
     gather = Gather(
         input="speech",
@@ -363,12 +314,11 @@ async def call_menu(CallSid: str = Form(...), Digits: str = Form(default="")):
         language="en-US",
     )
     gather.say(
-        f"You'll be speaking with {persona['name']}, {persona['title']}. "
-        "Before we connect, briefly tell me what you're selling.",
+        "Call Coach. Tell me what you're selling and I'll connect you.",
         voice="Polly.Joanna",
     )
     vr.append(gather)
-    vr.redirect("/call/menu", method="POST")
+    vr.redirect("/call/incoming", method="POST")
     return _xml(str(vr))
 
 
