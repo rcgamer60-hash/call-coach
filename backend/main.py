@@ -289,7 +289,6 @@ def _twiml_response(text: str, voice: str, gather_action: str) -> str:
         method="POST",
         speech_timeout="auto",
         language="en-US",
-        enhanced=True,
     )
     gather.say(text, voice=voice)
     vr.append(gather)
@@ -397,7 +396,6 @@ async def call_respond(
             method="POST",
             speech_timeout="auto",
         )
-        gather.say("Go ahead, I'm listening.", voice=voice)
         vr.append(gather)
         return _xml(str(vr))
 
