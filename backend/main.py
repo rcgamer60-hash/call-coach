@@ -337,7 +337,8 @@ async def call_got_product(
         return _xml(str(vr))
 
     session["product"] = SpeechResult.strip() or "general sales"
-    persona_key = session["persona"]
+    persona_key = random.choice(list(PERSONAS.keys()))
+    session["persona"] = persona_key
     persona = PERSONAS[persona_key]
     voice = PERSONA_VOICE[persona_key]
 
