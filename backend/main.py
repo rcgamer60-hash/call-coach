@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import time
 from typing import Optional
 
@@ -266,8 +267,6 @@ async def feedback(req: FeedbackRequest):
 # Twilio phone call backend
 # ---------------------------------------------------------------------------
 
-import random
-
 call_sessions: dict[str, dict] = {}
 
 PERSONA_VOICE = {
@@ -315,7 +314,7 @@ async def call_incoming(CallSid: str = Form(...)):
     )
     gather.say(
         "Call Coach. Tell me what you're selling and I'll connect you.",
-        voice="Polly.Joanna",
+        voice="Polly.Joanna-Neural",
     )
     vr.append(gather)
     vr.redirect("/call/incoming", method="POST")
@@ -342,13 +341,11 @@ async def call_got_product(
     voice = PERSONA_VOICE[persona_key]
 
     # Get Claude greeting
-    system = persona["system"]
-    if session["product"]:
-        system += (
-            f"\n\nThe salesperson is selling: {session['product']}. "
-            "Make all your responses specific to that industry and product. "
-            "Every call should feel fresh and different."
-        )
+    system = persona["system"] + (
+        f"\n\nThe salesperson is selling: {session['product']}. "
+        "Make all your responses specific to that industry and product. "
+        "Every call should feel fresh and different."
+    )
 
     greeting_prompt = (
         f"(The call just connected. You are {persona['name']}, {persona['title']}. "
