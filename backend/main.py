@@ -131,8 +131,13 @@ PERSONAS = {
 }
 
 
+_client = None
+
 def ai_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    return _client
 
 
 app = FastAPI()
@@ -150,6 +155,11 @@ app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 @app.get("/")
 async def root():
     return FileResponse("../frontend/index.html")
+
+
+@app.get("/ping")
+async def ping():
+    return {"ok": True}
 
 
 @app.get("/api/personas")
