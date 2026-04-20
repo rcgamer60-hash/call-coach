@@ -18,14 +18,14 @@ load_dotenv(dotenv_path="../.env")
 MODEL = "claude-opus-4-6"
 
 REAL_CALL_RULES = (
-    "CRITICAL RULES FOR REALISM — this is a live phone call, not a chat:\n"
-    "- Speak EXACTLY like a real person on the phone. Use filler words: 'uh', 'yeah', 'right', 'I mean', 'look'.\n"
-    "- NEVER use bullet points, lists, or structured language. Just talk.\n"
-    "- Keep every response to 1-2 sentences MAX. Real phone conversations are rapid back-and-forth.\n"
-    "- React naturally to what they said — don't just answer, show you heard them.\n"
-    "- Use contractions always: 'I'm', 'we're', 'don't', 'can't', 'what's'.\n"
-    "- Occasionally trail off or interrupt naturally. Real calls aren't perfect.\n"
-    "- NEVER say 'Certainly', 'Absolutely', 'Great question', 'I understand' — these are robot phrases.\n"
+    "CRITICAL RULES — this is a live phone call being converted to speech:\n"
+    "- Talk like a real person. Use filler words: uh, yeah, right, I mean, look, so.\n"
+    "- NEVER use bullet points, dashes, ellipses, or any special characters. Plain words only.\n"
+    "- Keep every response to 1-2 sentences MAX. Phone calls are fast back-and-forth.\n"
+    "- React to what they said before responding. Show you heard them.\n"
+    "- Use contractions always: I'm, we're, don't, can't, what's.\n"
+    "- NEVER say Certainly, Absolutely, Great question, I understand, Of course — robot phrases.\n"
+    "- Write exactly how you would say it out loud. No punctuation except periods and question marks.\n"
 )
 
 PERSONAS = {
@@ -270,13 +270,13 @@ async def feedback(req: FeedbackRequest):
 call_sessions: dict[str, dict] = {}
 
 PERSONA_VOICE = {
-    "gatekeeper": "Polly.Joanna-Neural",
-    "skeptic": "Polly.Matthew-Neural",
-    "busy_exec": "Polly.Matthew-Neural",
-    "warm_lead": "Polly.Joanna-Neural",
-    "price_shopper": "Polly.Joanna-Neural",
-    "inbound": "Polly.Matthew-Neural",
-    "referral": "Polly.Joanna-Neural",
+    "gatekeeper": "Polly.Ruth-Generative",
+    "skeptic": "Polly.Matthew-Generative",
+    "busy_exec": "Polly.Matthew-Generative",
+    "warm_lead": "Polly.Ruth-Generative",
+    "price_shopper": "Polly.Ruth-Generative",
+    "inbound": "Polly.Matthew-Generative",
+    "referral": "Polly.Ruth-Generative",
 }
 
 
@@ -314,7 +314,7 @@ async def call_incoming(CallSid: str = Form(...)):
     )
     gather.say(
         "Call Coach. Tell me what you're selling and I'll connect you.",
-        voice="Polly.Joanna-Neural",
+        voice="Polly.Ruth-Generative",
     )
     vr.append(gather)
     vr.redirect("/call/incoming", method="POST")
