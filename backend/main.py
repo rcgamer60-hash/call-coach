@@ -6,12 +6,12 @@ from typing import Optional
 
 import anthropic
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from twilio.twiml.voice_response import Gather, VoiceResponse
+from twilio.twiml.voice_response import Connect, VoiceResponse
 
 load_dotenv(dotenv_path="../.env")
 
@@ -275,7 +275,7 @@ async def feedback(req: FeedbackRequest):
 
 
 # ---------------------------------------------------------------------------
-# Twilio phone call backend
+# Twilio ConversationRelay — persistent WebSocket, streaming responses
 # ---------------------------------------------------------------------------
 
 call_sessions: dict[str, dict] = {}
@@ -291,154 +291,152 @@ PERSONA_VOICE = {
 }
 
 
-def _twiml_response(text: str, voice: str, gather_action: str) -> str:
-    vr = VoiceResponse()
-    gather = Gather(
-        input="speech",
-        action=gather_action,
-        method="POST",
-        speech_timeout="1",
-        language="en-US",
-    )
-    gather.say(text, voice=voice)
-    vr.append(gather)
-    vr.redirect(gather_action, method="POST")
-    return str(vr)
-
-
 def _xml(content: str):
     return Response(content=content, media_type="application/xml")
 
 
-@app.post("/call/incoming")
-async def call_incoming(CallSid: str = Form(...)):
-    """Entry point — ask what they're selling, then drop straight into the call."""
-    call_sessions[CallSid] = {"history": [], "persona": None, "product": None}
-    vr = VoiceResponse()
-    gather = Gather(
-        input="speech",
-        action="/call/got-product",
-        method="POST",
-        speech_timeout="auto",
-        language="en-US",
-    )
-    gather.say(
-        "Call Coach. Tell me what you're selling and I'll connect you.",
-        voice="Polly.Ruth-Generative",
-    )
-    vr.append(gather)
-    vr.redirect("/call/incoming", method="POST")
-    return _xml(str(vr))
-
-
-@app.post("/call/got-product")
-async def call_got_product(
-    CallSid: str = Form(...),
-    SpeechResult: str = Form(default=""),
-):
-    """Capture product context, then trigger Claude greeting."""
-    session = call_sessions.get(CallSid)
-    if not session:
-        vr = VoiceResponse()
-        vr.say("Session expired. Please call back.")
-        vr.hangup()
-        return _xml(str(vr))
-
-    session["product"] = SpeechResult.strip() or "general sales"
-    persona_key = random.choice(list(PERSONAS.keys()))
-    session["persona"] = persona_key
-    persona = PERSONAS[persona_key]
-    voice = PERSONA_VOICE[persona_key]
-
-    # Get Claude greeting
-    system = persona["system"] + (
-        f"\n\nThe salesperson is selling: {session['product']}. "
+def _build_system(persona: dict, product: str) -> str:
+    return persona["system"] + (
+        f"\n\nThe salesperson is selling: {product}. "
         "Make all your responses specific to that industry and product. "
         "Every call should feel fresh and different."
     )
 
-    greeting_prompt = (
-        f"(The call just connected. You are {persona['name']}, {persona['title']}. "
-        "Answer the phone naturally — one short sentence, just like a real call.)"
+
+@app.post("/call/incoming")
+async def call_incoming():
+    """Route incoming call to ConversationRelay WebSocket."""
+    vr = VoiceResponse()
+    connect = Connect()
+    connect.conversation_relay(
+        url="wss://call-coach-zace.onrender.com/call/stream",
+        tts_provider="Amazon",
+        voice="Polly.Ruth-Generative",
+        transcription_provider="Deepgram",
+        speech_model="nova-2",
+        language="en-US",
+        interrupt_by_dtmf=False,
     )
-
-    client = ai_client()
-    resp = client.messages.create(
-        model=MODEL_FAST,
-        max_tokens=50,
-        system=system,
-        messages=[{"role": "user", "content": greeting_prompt}],
-        temperature=1,
-    )
-    greeting = resp.content[0].text.strip()
-    session["history"] = [
-        {"role": "user", "content": greeting_prompt},
-        {"role": "assistant", "content": greeting},
-    ]
-
-    return _xml(_twiml_response(greeting, voice, "/call/respond"))
+    vr.append(connect)
+    return _xml(str(vr))
 
 
-@app.post("/call/respond")
-async def call_respond(
-    CallSid: str = Form(...),
-    SpeechResult: str = Form(default=""),
-):
-    """Process what the salesperson said, get Claude reply, keep going."""
-    session = call_sessions.get(CallSid)
-    if not session or not session.get("persona"):
-        vr = VoiceResponse()
-        vr.say("Session expired.")
-        vr.hangup()
-        return _xml(str(vr))
+@app.websocket("/call/stream")
+async def call_stream(websocket: WebSocket):
+    """ConversationRelay WebSocket — persistent connection for entire call."""
+    await websocket.accept()
+    call_sid = None
+    session = {"history": [], "persona": None, "product": None, "got_product": False}
 
-    user_speech = SpeechResult.strip()
-    if not user_speech:
-        persona_key = session["persona"]
-        voice = PERSONA_VOICE[persona_key]
-        vr = VoiceResponse()
-        gather = Gather(
-            input="speech",
-            action="/call/respond",
-            method="POST",
-            speech_timeout="auto",
-        )
-        vr.append(gather)
-        return _xml(str(vr))
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            msg = json.loads(raw)
+            msg_type = msg.get("type")
 
-    persona_key = session["persona"]
-    persona = PERSONAS[persona_key]
-    voice = PERSONA_VOICE[persona_key]
+            if msg_type == "setup":
+                call_sid = msg.get("callSid")
+                call_sessions[call_sid] = session
+                # Ask what they're selling
+                await websocket.send_text(json.dumps({
+                    "type": "text",
+                    "token": "Call Coach. Tell me what you're selling and I'll connect you.",
+                    "last": True,
+                }))
 
-    system = persona["system"]
-    if session.get("product"):
-        system += (
-            f"\n\nThe salesperson is selling: {session['product']}. "
-            "Make all your responses specific to that industry and product. "
-            "Every call should feel fresh and different."
-        )
+            elif msg_type == "prompt":
+                voice_prompt = msg.get("voicePrompt", "").strip()
 
-    session["history"].append({"role": "user", "content": user_speech})
+                if not session["got_product"]:
+                    # First turn — capture product, pick persona, get greeting
+                    session["product"] = voice_prompt or "general sales"
+                    session["got_product"] = True
+                    persona_key = random.choice(list(PERSONAS.keys()))
+                    session["persona"] = persona_key
+                    persona = PERSONAS[persona_key]
+                    voice = PERSONA_VOICE[persona_key]
 
-    client = ai_client()
-    resp = client.messages.create(
-        model=MODEL_FAST,
-        max_tokens=75,
-        system=system,
-        messages=session["history"],
-        temperature=1,
-    )
-    reply = resp.content[0].text.strip()
-    session["history"].append({"role": "assistant", "content": reply})
+                    system = _build_system(persona, session["product"])
+                    greeting_prompt = (
+                        f"(The call just connected. You are {persona['name']}, {persona['title']}. "
+                        "Answer the phone naturally — one short sentence.)"
+                    )
 
-    return _xml(
-        _twiml_response(reply, voice, "/call/respond")
-    )
+                    # Stream greeting tokens as they arrive
+                    full_reply = ""
+                    client = ai_client()
+                    with client.messages.stream(
+                        model=MODEL_FAST,
+                        max_tokens=50,
+                        system=system,
+                        messages=[{"role": "user", "content": greeting_prompt}],
+                        temperature=1,
+                    ) as stream:
+                        for text in stream.text_stream:
+                            full_reply += text
+                            await websocket.send_text(json.dumps({
+                                "type": "text",
+                                "token": text,
+                                "last": False,
+                            }))
+                    await websocket.send_text(json.dumps({"type": "text", "token": "", "last": True}))
+
+                    # Update voice for this persona
+                    await websocket.send_text(json.dumps({
+                        "type": "config",
+                        "voice": voice,
+                    }))
+
+                    session["history"] = [
+                        {"role": "user", "content": greeting_prompt},
+                        {"role": "assistant", "content": full_reply},
+                    ]
+
+                else:
+                    # Ongoing conversation — stream response
+                    if not voice_prompt:
+                        continue
+
+                    persona_key = session["persona"]
+                    persona = PERSONAS[persona_key]
+                    system = _build_system(persona, session["product"])
+                    session["history"].append({"role": "user", "content": voice_prompt})
+
+                    full_reply = ""
+                    client = ai_client()
+                    with client.messages.stream(
+                        model=MODEL_FAST,
+                        max_tokens=75,
+                        system=system,
+                        messages=session["history"],
+                        temperature=1,
+                    ) as stream:
+                        for text in stream.text_stream:
+                            full_reply += text
+                            await websocket.send_text(json.dumps({
+                                "type": "text",
+                                "token": text,
+                                "last": False,
+                            }))
+                    await websocket.send_text(json.dumps({"type": "text", "token": "", "last": True}))
+                    session["history"].append({"role": "assistant", "content": full_reply})
+
+            elif msg_type == "interrupt":
+                # User interrupted — nothing to do, stream is already stopped
+                pass
+
+            elif msg_type == "end":
+                break
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if call_sid:
+            call_sessions.pop(call_sid, None)
 
 
 @app.post("/call/status")
 async def call_status(CallSid: str = Form(...), CallStatus: str = Form(default="")):
-    """Cleanup session when call ends."""
     if CallStatus in ("completed", "failed", "busy", "no-answer", "canceled"):
         call_sessions.pop(CallSid, None)
     return {"ok": True}
