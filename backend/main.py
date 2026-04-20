@@ -164,6 +164,7 @@ class RespondRequest(BaseModel):
     persona: str
     history: list[dict]
     message: str
+    product_context: Optional[str] = None
 
 
 @app.post("/api/respond")
@@ -172,14 +173,31 @@ async def respond(req: RespondRequest):
     if not persona:
         raise HTTPException(400, f"Unknown persona: {req.persona}")
 
-    messages = req.history + [{"role": "user", "content": req.message}]
+    # Inject what the salesperson is selling so every response is contextual
+    system = persona["system"]
+    if req.product_context:
+        system += (
+            f"\n\nThe salesperson is selling: {req.product_context}. "
+            "Make all your responses specific to that industry and product — "
+            "use realistic objections, questions, and references that fit that context. "
+            "Every call should feel fresh and different."
+        )
+
+    is_greeting = req.message == "__GREETING__"
+    greeting_prompt = (
+        f"(The call just connected. You are {persona['name']}, {persona['title']}. "
+        "Answer the phone naturally — one short sentence, just like a real call.)"
+    )
+    user_msg = greeting_prompt if is_greeting else req.message
+    messages = req.history + [{"role": "user", "content": user_msg}]
 
     client = ai_client()
     response = client.messages.create(
         model=MODEL,
         max_tokens=200,
-        system=persona["system"],
+        system=system,
         messages=messages,
+        temperature=1,  # vary each conversation
     )
     reply = response.content[0].text.strip()
     return {"reply": reply, "persona_name": persona["name"]}

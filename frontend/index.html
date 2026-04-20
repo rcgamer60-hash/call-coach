@@ -40,6 +40,10 @@
     .diff-Hard{background:rgba(251,146,60,.1);color:#fb923c}
     .diff-Very\ Hard{background:rgba(248,113,113,.1);color:#f87171}
 
+    .prod-btn{background:#111118;border:2px solid #1c1c2e;border-radius:12px;padding:12px 10px;font-size:13px;font-weight:600;color:#aaa;cursor:pointer;text-align:center;transition:border-color .15s,background .15s;-webkit-user-select:none;user-select:none}
+    .prod-btn:active{background:#16162a}
+    .prod-btn.sel{border-color:#6366f1;background:rgba(99,102,241,.1);color:#818cf8}
+    .product-custom:focus{border-color:#6366f1}
     .start-btn{width:100%;padding:18px;background:#6366f1;color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;transition:background .15s;-webkit-appearance:none}
     .start-btn:active{background:#4f52d1}
     .start-btn:disabled{background:#1c1c2e;color:#333;cursor:not-allowed}
@@ -134,6 +138,12 @@
     ⚠️ Voice requires Chrome (Android) or Safari (iPhone). Other browsers may not support the mic.
   </div>
 
+  <p class="section-label">What are you selling?</p>
+  <div id="product-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"></div>
+  <input id="product-custom" class="product-custom" placeholder="Or type your own product / service…"
+    oninput="onCustomProduct(this.value)"
+    style="width:100%;background:#111118;border:2px solid #1c1c2e;border-radius:12px;padding:12px 14px;color:#fff;font-size:14px;outline:none;margin-bottom:20px;-webkit-appearance:none"/>
+
   <p class="section-label">Choose your prospect</p>
   <div id="persona-grid" class="persona-grid"></div>
 
@@ -191,7 +201,7 @@
         </button>
       </div>
     </div>
-    <p class="mic-hint">Tap to speak · tap again to send</p>
+    <p class="mic-hint" id="mic-hint">Tap mic to start · speaks back automatically</p>
   </div>
 </div>
 
@@ -232,10 +242,20 @@
 
 <script>
 let personas={}, selectedKey=null, callHistory=[], recognition=null;
+let productContext='';
 let synth=window.speechSynthesis, isListening=false, isSpeaking=false;
 let timerInterval=null, callSeconds=0, currentText='';
+let voicesReady=false, cachedVoices=[];
 
 const $=id=>document.getElementById(id);
+
+/* Load voices — they're async on Chrome */
+function loadVoices(){
+  cachedVoices=synth.getVoices();
+  if(cachedVoices.length) voicesReady=true;
+}
+loadVoices();
+if(synth.onvoiceschanged!==undefined) synth.onvoiceschanged=loadVoices;
 
 function show(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -243,9 +263,41 @@ function show(id){
   window.scrollTo(0,0);
 }
 
+const PRESETS=[
+  {label:'💻 SaaS / Software', value:'B2B SaaS software solution'},
+  {label:'🏠 Real Estate',      value:'real estate services or property'},
+  {label:'📋 Insurance',        value:'insurance or financial products'},
+  {label:'🤝 Consulting',       value:'consulting or professional services'},
+];
+
+function selectProduct(value, btnEl){
+  productContext=value;
+  $('product-custom').value='';
+  document.querySelectorAll('.prod-btn').forEach(b=>b.classList.remove('sel'));
+  if(btnEl) btnEl.classList.add('sel');
+  updateStartBtn();
+}
+function onCustomProduct(val){
+  productContext=val.trim();
+  document.querySelectorAll('.prod-btn').forEach(b=>b.classList.remove('sel'));
+  updateStartBtn();
+}
+function updateStartBtn(){
+  $('start-btn').disabled=!selectedKey||!productContext;
+}
+
 async function init(){
   if(!('SpeechRecognition' in window)&&!('webkitSpeechRecognition' in window))
     $('warn-box').style.display='block';
+
+  // Build product preset buttons
+  const pg=$('product-grid');
+  PRESETS.forEach(p=>{
+    const b=document.createElement('button');
+    b.className='prod-btn'; b.textContent=p.label;
+    b.onclick=()=>selectProduct(p.value, b);
+    pg.appendChild(b);
+  });
 
   const res=await fetch('/api/personas');
   personas=await res.json();
@@ -274,7 +326,7 @@ function selectPersona(key){
   selectedKey=key;
   document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('sel'));
   document.getElementById('card-'+key).classList.add('sel');
-  $('start-btn').disabled=false;
+  updateStartBtn();
 }
 
 function startCall(){
@@ -302,7 +354,7 @@ function startCall(){
         const m=Math.floor(callSeconds/60),s=callSeconds%60;
         $('timer').textContent=m+':'+(s<10?'0':'')+s;
       },1000);
-      sendMessage('(call just connected — say hello as the prospect, keep it short)');
+      sendMessage('__GREETING__');
     },800);
   },2500);
 }
@@ -334,18 +386,21 @@ function stopRing(){
   if(ringCtx){ringCtx.close();ringCtx=null;}
 }
 
+/* Tap mic to start speaking — silence auto-sends, AI speaks back, then auto-listens again */
 function toggleMic(){
-  if(isSpeaking){synth.cancel();isSpeaking=false;}
-  isListening?stopListening():startListening();
+  if(isSpeaking){ synth.cancel(); isSpeaking=false; setStatus('idle'); }
+  isListening ? stopListening() : startListening();
 }
 
 function startListening(){
+  if(isSpeaking || isListening) return;
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert('Voice not supported — use Chrome or Safari');return;}
   recognition=new SR();
-  recognition.continuous=true;
+  recognition.continuous=false;   /* auto-stops on silence — no second tap needed */
   recognition.interimResults=true;
   recognition.lang='en-US';
+  currentText='';
   recognition.onstart=()=>{
     isListening=true;
     setStatus('listen');
@@ -357,24 +412,24 @@ function startListening(){
     for(let i=e.resultIndex;i<e.results.length;i++)
       e.results[i].isFinal?fin+=e.results[i][0].transcript:int+=e.results[i][0].transcript;
     $('live-text').textContent=fin||int;
-    currentText=fin||int;
+    if(fin) currentText=fin;
+    else if(!currentText) currentText=int;
   };
-  recognition.onerror=()=>{isListening=false;resetMic();};
+  recognition.onerror=e=>{
+    if(e.error==='no-speech'){/* silence — just reset */}
+    isListening=false; resetMic();
+  };
   recognition.onend=()=>{
-    if(isListening){
-      const t=currentText.trim();
-      if(t)submitSpeech(t);
-      isListening=false;resetMic();
-    }
+    isListening=false; resetMic();
+    const t=currentText.trim();
+    currentText='';
+    if(t) submitSpeech(t);
   };
   recognition.start();
 }
 
 function stopListening(){
-  if(recognition)recognition.stop();
-  isListening=false;resetMic();
-  const t=currentText.trim();
-  if(t)submitSpeech(t);
+  if(recognition){ try{recognition.stop();}catch(e){} }
 }
 
 function resetMic(){
@@ -391,18 +446,18 @@ async function submitSpeech(text){
 
 async function sendMessage(userText){
   setStatus('think');
-  if(userText!=='(call starts — greet the prospect)')
-    callHistory.push({role:'user',content:userText});
+  const isGreeting = userText==='__GREETING__';
+  if(!isGreeting) callHistory.push({role:'user',content:userText});
   try{
     const r=await fetch('/api/respond',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({persona:selectedKey,history:callHistory,message:userText})
+      body:JSON.stringify({persona:selectedKey,history:callHistory,message:userText,product_context:productContext})
     });
     const data=await r.json();
     callHistory.push({role:'assistant',content:data.reply});
     addMsg('bot',data.reply,data.persona_name);
-    speak(data.reply);
+    speak(data.reply);  /* speak() auto-restarts listening when done */
   }catch{
     setStatus('idle');
     addMsg('bot','(connection error)','');
@@ -422,15 +477,48 @@ function addMsg(role,text,name){
   t.scrollTop=t.scrollHeight;
 }
 
+/* Persona voice map — male/female/tone per character */
+const VOICE_PREF={
+  gatekeeper:  {gender:'female', hint:'Samantha'},
+  skeptic:     {gender:'male',   hint:'Daniel'},
+  price_shopper:{gender:'female',hint:'Karen'},
+  busy_exec:   {gender:'male',   hint:'Google US English Male'},
+  warm_lead:   {gender:'female', hint:'Samantha'},
+  referral:    {gender:'female', hint:'Karen'},
+  inbound:     {gender:'male',   hint:'Google US English'},
+};
+
+function pickVoice(personaKey){
+  const voices=cachedVoices.length?cachedVoices:synth.getVoices();
+  const pref=VOICE_PREF[personaKey]||{gender:'female'};
+  /* try hint name first */
+  let v=voices.find(v=>v.lang.startsWith('en')&&v.name.includes(pref.hint||''));
+  /* fall back to gender by name heuristic */
+  if(!v){
+    const femaleNames=['Samantha','Karen','Victoria','Moira','Fiona','Veena','Tessa','Ava'];
+    const maleNames=['Daniel','Tom','Alex','Fred','Ralph','Bruce','Junior'];
+    const pool=pref.gender==='male'?maleNames:femaleNames;
+    v=voices.find(v=>v.lang.startsWith('en')&&pool.some(n=>v.name.includes(n)));
+  }
+  /* fall back to any en-US */
+  if(!v) v=voices.find(v=>v.lang==='en-US')||voices.find(v=>v.lang.startsWith('en'))||voices[0];
+  return v||null;
+}
+
 function speak(text){
   synth.cancel();
   const u=new SpeechSynthesisUtterance(text);
-  u.rate=1.05;
-  const voices=synth.getVoices();
-  const v=voices.find(v=>v.lang==='en-US'&&v.name.includes('Google'))||voices.find(v=>v.lang==='en-US')||voices[0];
-  if(v)u.voice=v;
-  setStatus('speak');isSpeaking=true;
-  u.onend=u.onerror=()=>{isSpeaking=false;setStatus('idle');};
+  u.rate=1.0; u.pitch=1.0;
+  const v=pickVoice(selectedKey);
+  if(v) u.voice=v;
+  setStatus('speak'); isSpeaking=true;
+  u.onend=()=>{
+    isSpeaking=false;
+    setStatus('idle');
+    /* hand mic back automatically so conversation flows */
+    setTimeout(startListening, 300);
+  };
+  u.onerror=()=>{ isSpeaking=false; setStatus('idle'); setTimeout(startListening,300); };
   synth.speak(u);
 }
 
