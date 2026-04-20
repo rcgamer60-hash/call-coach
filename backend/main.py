@@ -16,6 +16,7 @@ from twilio.twiml.voice_response import Gather, VoiceResponse
 load_dotenv(dotenv_path="../.env")
 
 MODEL = "claude-opus-4-6"
+MODEL_FAST = "claude-haiku-4-5-20251001"
 
 REAL_CALL_RULES = (
     "CRITICAL RULES — this is a live phone call being converted to speech:\n"
@@ -286,12 +287,11 @@ def _twiml_response(text: str, voice: str, gather_action: str) -> str:
         input="speech",
         action=gather_action,
         method="POST",
-        speech_timeout="auto",
+        speech_timeout="1",
         language="en-US",
     )
     gather.say(text, voice=voice)
     vr.append(gather)
-    # Silently re-listen — no robot interjection
     vr.redirect(gather_action, method="POST")
     return str(vr)
 
@@ -354,8 +354,8 @@ async def call_got_product(
 
     client = ai_client()
     resp = client.messages.create(
-        model=MODEL,
-        max_tokens=100,
+        model=MODEL_FAST,
+        max_tokens=50,
         system=system,
         messages=[{"role": "user", "content": greeting_prompt}],
         temperature=1,
@@ -412,8 +412,8 @@ async def call_respond(
 
     client = ai_client()
     resp = client.messages.create(
-        model=MODEL,
-        max_tokens=150,
+        model=MODEL_FAST,
+        max_tokens=75,
         system=system,
         messages=session["history"],
         temperature=1,
